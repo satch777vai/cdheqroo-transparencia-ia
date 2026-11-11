@@ -49,6 +49,7 @@ def interfaz_usuario():
             input[type="text"]:focus { border-color: #003366; }
             button { background-color: #003366; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.3s; }
             button:hover { background-color: #002244; }
+            .summary-badge { background-color: #e8f4fd; border-left: 5px solid #003366; padding: 12px 18px; border-radius: 6px; margin-bottom: 20px; font-size: 15px; color: #003366; font-weight: 600; display: none; }
             .cards-container { display: flex; flex-direction: column; gap: 15px; }
             .card { border: 1px solid #e1e8ed; border-left: 5px solid #003366; padding: 18px; border-radius: 8px; background: #fafafa; }
             .card h3 { margin: 0 0 6px 0; color: #003366; font-size: 18px; }
@@ -69,6 +70,7 @@ def interfaz_usuario():
                 <button onclick="realizarBusqueda()">Buscar</button>
             </div>
 
+            <div class="summary-badge" id="summaryBadge"></div>
             <div class="status" id="statusMessage">Alineado con estándares de transparencia y accesibilidad.</div>
             <div class="cards-container" id="resultsContainer"></div>
         </div>
@@ -78,13 +80,16 @@ def interfaz_usuario():
                 const query = document.getElementById('searchInput').value.trim();
                 const container = document.getElementById('resultsContainer');
                 const status = document.getElementById('statusMessage');
+                const summaryBadge = document.getElementById('summaryBadge');
 
                 if (!query) {
                     status.textContent = 'Por favor ingresa un término de búsqueda.';
+                    summaryBadge.style.display = 'none';
                     return;
                 }
 
                 status.textContent = 'Buscando registros en la nube...';
+                summaryBadge.style.display = 'none';
                 container.innerHTML = '';
 
                 try {
@@ -92,7 +97,10 @@ def interfaz_usuario():
                     const data = await response.json();
 
                     if (data.estatus === 'Exito' && data.total_encontrados > 0) {
-                        status.textContent = `Se encontraron ${data.total_encontrados} registro(s) para "${data.busqueda}":`;
+                        status.textContent = '';
+                        summaryBadge.textContent = `Resumen de consulta: Se encontraron ${data.total_encontrados} registro(s) para "${data.busqueda}".`;
+                        summaryBadge.style.display = 'block';
+
                         data.resultados.forEach(item => {
                             const card = document.createElement('div');
                             card.className = 'card';
@@ -108,10 +116,13 @@ def interfaz_usuario():
                             container.appendChild(card);
                         });
                     } else {
-                        status.textContent = `No se encontraron coincidencias para "${query}".`;
+                        status.textContent = '';
+                        summaryBadge.textContent = `Resumen de consulta: No se encontraron registros para "${query}".`;
+                        summaryBadge.style.display = 'block';
                     }
                 } catch (error) {
                     status.textContent = 'Ocurrió un error al consultar el servidor.';
+                    summaryBadge.style.display = 'none';
                 }
             }
 
@@ -132,7 +143,6 @@ def listar_areas():
         df = pd.read_excel(ruta, sheet_name='Reporte de Formatos')
         if 'Unnamed: 7' in df.columns:
             areas = df['Unnamed: 7'].dropna().unique().tolist()
-            # Filtramos encabezados si los hay
             areas_limpias = [str(a) for a in areas if "AREA" not in str(a).upper() and len(str(a)) > 3]
             return {"estatus": "Exito", "total_areas": len(areas_limpias), "areas": areas_limpias}
         return {"estatus": "Error", "detalle": "Columna de área no encontrada"}
