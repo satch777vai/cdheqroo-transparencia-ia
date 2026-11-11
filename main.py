@@ -22,6 +22,14 @@ def normalizar(texto):
     sin_tildes = "".join([c for c in nfd if unicodedata.category(c) != 'Mn'])
     return sin_tildes.lower()
 
+def formatear_moneda(valor):
+    """Formatea valores numéricos a estilo monetario con comas y 2 decimales"""
+    try:
+        num = float(valor)
+        return f"{num:,.2f}"
+    except (ValueError, TypeError):
+        return str(valor)
+
 @app.get("/", response_class=HTMLResponse)
 def interfaz_usuario():
     html_content = """
@@ -140,7 +148,6 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda: no
         
         df = pd.read_excel(ruta, sheet_name='Reporte de Formatos')
         
-        # Corregido: .map en lugar de .applymap para versiones recientes de pandas
         df_norm = df.fillna("").astype(str).map(normalizar)
         
         mask = False
@@ -154,8 +161,10 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda: no
             area = str(row.get('Unnamed: 7', 'N/D'))
             puesto = str(row.get('Unnamed: 5', 'N/D'))
             nombre = f"{row.get('Unnamed: 8', '')} {row.get('Unnamed: 9', '')} {row.get('Unnamed: 10', '')}".strip()
-            sueldo_bruto = str(row.get('Unnamed: 12', 'N/D'))
-            sueldo_neto = str(row.get('Unnamed: 14', 'N/D'))
+            
+            # Aplicamos formato monetario limpio con 2 decimales
+            sueldo_bruto = formatear_moneda(row.get('Unnamed: 12', '0'))
+            sueldo_neto = formatear_moneda(row.get('Unnamed: 14', '0'))
             
             registros_limpios.append({
                 "area": area,
