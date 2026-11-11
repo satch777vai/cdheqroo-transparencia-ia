@@ -22,12 +22,11 @@ def probar_excel():
     try:
         xls = pd.ExcelFile(ruta)
         df = pd.read_excel(ruta, sheet_name='Reporte de Formatos')
-        filas = len(df) - 6
         return {
             "estatus": "Exito",
             "archivo": "lgt_65_vii.1-trimestre-1.xlsx",
             "hojas_encontradas": xls.sheet_names,
-            "registros_servidores_publicos": filas
+            "total_filas": len(df)
         }
     except Exception as e:
         return {"estatus": "Error", "detalle": str(e)}
@@ -36,20 +35,25 @@ def probar_excel():
 def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda: nombre, puesto o area")):
     ruta = "data/lgt_65_vii.1-trimestre-1.xlsx"
     try:
+        # Limpiamos espacios y comillas accidentales de la consulta
+        busqueda_limpia = q.strip('"\\'\' ').strip()
+        
         df = pd.read_excel(ruta, sheet_name='Reporte de Formatos', skiprows=5)
         df.columns = df.columns.astype(str).str.strip()
         
-        # Búsqueda robusta columna por columna
-        mask = pd.Series([False] * len(df))
-        for col in df.columns:
-            mask = mask | df[col].astype(str).str.contains(q, case=False, na=False)
+        # Filtramos eliminando valores nulos
+        df_str = df.fillna("").astype(str)
+        
+        mask = pd.Series([False] * len(df_str))
+        for col in df_str.columns:
+            mask = mask | df_str[col].str.contains(busqueda_limpia, case=False, na=False)
             
-        resultado_df = df[mask]
+        resultado_df = df[mask].fillna("")
         registros = resultado_df.to_dict(orient="records")
         
         return {
             "estatus": "Exito",
-            "busqueda": q,
+            "busqueda": busqueda_limpia,
             "total_encontrados": len(registros),
             "resultados": registros
         }
