@@ -36,17 +36,15 @@ def probar_excel():
 def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda: nombre, puesto o area")):
     ruta = "data/lgt_65_vii.1-trimestre-1.xlsx"
     try:
-        # Leemos el excel saltando las cabeceras institucionales para llegar a los datos tabulares
         df = pd.read_excel(ruta, sheet_name='Reporte de Formatos', skiprows=5)
-        
-        # Limpiamos nombres de columnas por si tienen espacios extra
         df.columns = df.columns.astype(str).str.strip()
         
-        # Convertimos todo el DataFrame a texto para hacer una búsqueda global flexible
-        df_str = df.astype(str)
-        mask = df_str.apply(lambda row: row.str.contains(q, case=False, na=False).any(), axis=1)
+        # Búsqueda robusta columna por columna
+        mask = pd.Series([False] * len(df))
+        for col in df.columns:
+            mask = mask | df[col].astype(str).str.contains(q, case=False, na=False)
+            
         resultado_df = df[mask]
-        
         registros = resultado_df.to_dict(orient="records")
         
         return {
