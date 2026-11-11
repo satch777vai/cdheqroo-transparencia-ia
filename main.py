@@ -98,7 +98,7 @@ def interfaz_usuario():
             <div id="chat" class="tab-content">
                 <div class="chat-container">
                     <div class="chat-messages" id="chatMessages">
-                        <div class="message bot">¡Hola! Soy tu asistente virtual de transparencia. Pregúntame sobre sueldos, rangos o comparativas (ej. <i>"¿Quién gana más?"</i>, <i>"¿Quién gana menos?"</i>, <i>"Sueldos entre 20000 y 40000"</i> o <i>"Busca a Gabriel"</i>).</div>
+                        <div class="message bot">¡Hola! Soy tu asistente virtual de transparencia. Pregúntame sobre sueldos, rangos o comparativas (ej. <i>"¿Quién gana más?"</i>, <i>"¿Quién gana menos?"</i>, <i>"Sueldos entre 40000 y 60000"</i> o <i>"Busca a Gabriel"</i>).</div>
                     </div>
                     <div class="chat-input-box">
                         <input type="text" id="chatInput" placeholder="Escribe tu pregunta aquí...">
@@ -184,7 +184,7 @@ def interfaz_usuario():
                         });
                         botDiv.innerHTML = respuestaTexto;
                     } else {
-                        botDiv.textContent = `No encontré registros directos para "${text}". Prueba preguntando por rangos de sueldo (ej. "entre 20000 y 40000"), puestos o áreas específicas.`;
+                        botDiv.textContent = `No encontré registros directos para "${text}". Prueba preguntando por rangos de sueldo (ej. "entre 40000 y 60000"), puestos o áreas específicas.`;
                     }
 
                     chatMessages.appendChild(botDiv);
@@ -231,35 +231,40 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
         
         df = pd.read_excel(ruta, sheet_name='Reporte de Formatos')
         
-        # Preparamos la columna numérica de sueldo bruto
+        # Preparamos columnas numéricas tanto para sueldo bruto (Col 12) como neto (Col 14)
         try:
-            df['sueldo_num'] = pd.to_numeric(df['Unnamed: 12'], errors='coerce')
+            df['sueldo_bruto_num'] = pd.to_numeric(df['Unnamed: 12'], errors='coerce').fillna(0)
         except Exception:
-            df['sueldo_num'] = 0.0
+            df['sueldo_bruto_num'] = 0.0
+
+        try:
+            df['sueldo_neto_num'] = pd.to_numeric(df['Unnamed: 14'], errors='coerce').fillna(0)
+        except Exception:
+            df['sueldo_neto_num'] = 0.0
 
         df_norm = df.fillna("").astype(str).map(normalizar)
         
-        # 1. Detección de rangos numéricos (ej. "entre 20000 y 40000", "de 20 mil a 40 mil")
+        # 1. Detección de rangos numéricos (evaluando el sueldo neto/bruto de manera precisa)
         numeros_en_texto = re.findall(r'\d+', termino_crudo.replace(',', ''))
         es_rango = ("entre" in termino_norm or " a " in termino_norm or " y " in termino_norm) and len(numeros_en_texto) >= 2
         
         if es_rango:
             min_val = float(numeros_en_texto[0])
             max_val = float(numeros_en_texto[1])
-            # Si escribieron "20" refiriéndose a miles, ajustamos
             if min_val < 1000 and max_val < 1000:
                 min_val *= 1000
                 max_val *= 1000
-            resultado_df = df[(df['sueldo_num'] >= min_val) & (df['sueldo_num'] <= max_val)].sort_values(by='sueldo_num', ascending=False).fillna("")
+            # Filtramos por el sueldo neto o bruto que caiga en el rango
+            resultado_df = df[(df['sueldo_neto_num'] >= min_val) & (df['sueldo_neto_num'] <= max_val)].sort_values(by='sueldo_neto_num', ascending=False).fillna("")
         
         # 2. Detección de sueldos máximos ("quién gana más")
         elif any(p in termino_norm for p in ["mas", "mayor", "altos", "maximo"]) and any(p in termino_norm for p in ["sueldo", "gana", "salario", "dinero", "paga"]):
-            resultado_df = df.sort_values(by='sueldo_num', ascending=False).head(5).fillna("")
+            resultado_df = df.sort_values(by='sueldo_neto_num', ascending=False).head(5).fillna("")
         
         # 3. Detección de sueldos mínimos ("quién gana menos")
         elif any(p in termino_norm for p in ["menos", "menor", "bajos", "minimo"]) and any(p in termino_norm for p in ["sueldo", "gana", "salario", "dinero", "paga"]):
-            df_filtrado = df[df['sueldo_num'] > 100]
-            resultado_df = df_filtrado.sort_values(by='sueldo_num', ascending=True).head(5).fillna("")
+            df_filtrado = df[df['sueldo_neto_num'] > 100]
+            resultado_df = df_filtrado.sort_values(by='sueldo_neto_num', ascending=True).head(5).fillna("")
         
         # 4. Búsqueda general por coincidencia de texto
         else:
