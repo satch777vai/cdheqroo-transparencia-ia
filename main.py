@@ -140,8 +140,8 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda: no
         
         df = pd.read_excel(ruta, sheet_name='Reporte de Formatos')
         
-        # Creamos una copia auxiliar normalizada de todo el DataFrame para la búsqueda sin importar tildes ni mayúsculas
-        df_norm = df.fillna("").astype(str).applymap(normalizar)
+        # Corregido: .map en lugar de .applymap para versiones recientes de pandas
+        df_norm = df.fillna("").astype(str).map(normalizar)
         
         mask = False
         for col in df_norm.columns:
