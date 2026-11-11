@@ -97,7 +97,7 @@ def interfaz_usuario():
             <div id="chat" class="tab-content">
                 <div class="chat-container">
                     <div class="chat-messages" id="chatMessages">
-                        <div class="message bot">¡Hola! Soy tu asistente virtual de transparencia. Pregúntame sobre sueldos, puestos o áreas (ej. <i>"¿Quién gana más?"</i>, <i>"¿Cuánto gana el Director de Informática?"</i> o <i>"Busca a Gabriel"</i>).</div>
+                        <div class="message bot">¡Hola! Soy tu asistente virtual de transparencia. Pregúntame lo que necesites comparar o consultar (ej. <i>"¿Quién gana más?"</i>, <i>"¿Quién gana menos?"</i>, <i>"Sueldos de informática"</i> o <i>"Busca a Gabriel"</i>).</div>
                     </div>
                     <div class="chat-input-box">
                         <input type="text" id="chatInput" placeholder="Escribe tu pregunta aquí...">
@@ -177,13 +177,13 @@ def interfaz_usuario():
                     botDiv.className = 'message bot';
 
                     if (data.estatus === 'Exito' && data.total_encontrados > 0) {
-                        let respuestaTexto = `Encontré ${data.total_encontrados} registro(s) relacionado(s):<br><br>`;
+                        let respuestaTexto = `Análisis de tu consulta ("${data.busqueda}") - ${data.total_encontrados} resultado(s):<br><br>`;
                         data.resultados.forEach(item => {
                             respuestaTexto += `• <strong>${item.servidor_publico || 'VACANTE'}</strong> (${item.puesto} - ${item.area})<br>  Sueldo Neto: <strong>$${item.remuneracion_neta_mensual}</strong><br><br>`;
                         });
                         botDiv.innerHTML = respuestaTexto;
                     } else {
-                        botDiv.textContent = `No encontré coincidencias directas para "${text}". Intenta buscar por nombre de funcionario, puesto específico (ej. Director) o área.`;
+                        botDiv.textContent = `No encontré coincidencias directas para "${text}". Intenta buscar por nombre de funcionario, puesto, área o consultas comparativas (ej. "quién gana más", "quién gana menos").`;
                     }
 
                     chatMessages.appendChild(botDiv);
@@ -191,7 +191,7 @@ def interfaz_usuario():
                 } catch (error) {
                     const errDiv = document.createElement('div');
                     errDiv.className = 'message bot';
-                    errDiv.textContent = 'Ocurrió un error al procesar tu consulta.';
+                    errDiv.textContent = 'Ocurrió un error al procesar tu consulta analítica.';
                     chatMessages.appendChild(errDiv);
                 }
             }
@@ -231,19 +231,24 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
         df = pd.read_excel(ruta, sheet_name='Reporte de Formatos')
         df_norm = df.fillna("").astype(str).map(normalizar)
         
-        # Inteligencia conversacional: si preguntan quién gana más o por mayores sueldos
-        palabras_clave_top = ["mas", "mayor", "altos", "sueldo", "gana", "quien"]
-        es_consulta_top = any(p in termino_norm for p in ["mas", "mayor", "altos"]) and any(p in termino_norm for p in ["sueldo", "gana", "salario"])
+        # Inteligencia analítica y comparativa ampliada
+        es_max = any(p in termino_norm for p in ["mas", "mayor", "altos", "maximo", "elevado"]) and any(p in termino_norm for p in ["sueldo", "gana", "salario", "dinero", "paga"])
+        es_min = any(p in termino_norm for p in ["menos", "menor", "bajos", "minimo", "chico", "reducido"]) and any(p in termino_norm for p in ["sueldo", "gana", "salario", "dinero", "paga"])
         
-        if es_consulta_top:
-            # Ordenamos todo el DataFrame por sueldo bruto de mayor a menor y tomamos los primeros 5
-            try:
-                df['sueldo_num'] = pd.to_numeric(df['Unnamed: 12'], errors='coerce')
-                resultado_df = df.sort_values(by='sueldo_num', ascending=False).head(5).fillna("")
-            except Exception:
-                resultado_df = df.head(5).fillna("")
+        try:
+            df['sueldo_num'] = pd.to_numeric(df['Unnamed: 12'], errors='coerce')
+        except Exception:
+            pass
+
+        if es_max:
+            # Los 5 sueldos más altos
+            resultado_df = df.sort_values(by='sueldo_num', ascending=False).head(5).fillna("")
+        elif es_min:
+            # Los 5 sueldos más bajos (excluyendo ceros o vacíos extremos si los hay)
+            df_filtrado = df[df['sueldo_num'] > 100] if 'sueldo_num' in df.columns else df
+            resultado_df = df_filtrado.sort_values(by='sueldo_num', ascending=True).head(5).fillna("")
         else:
-            # Búsqueda normal por palabras clave
+            # Búsqueda general por coincidencia de texto
             mask = False
             for col in df_norm.columns:
                 mask = mask | df_norm[col].str.contains(termino_norm, na=False)
