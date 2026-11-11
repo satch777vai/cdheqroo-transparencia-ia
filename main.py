@@ -1,12 +1,14 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 import pandas as pd
 import unicodedata
 import glob
+import os
 import re
+import shutil
 
-app = FastAPI(title="CDHEQROO - Asistente Inteligente de Transparencia")
+app = FastAPI(title="CDHEQROO - Asistente Histórico de Transparencia")
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,6 +17,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Asegurar que exista la carpeta base de datos
+os.makedirs("data", exist_ok=True)
 
 def normalizar(texto):
     """Elimina acentos/tildes y convierte a minúsculas para una búsqueda robusta"""
@@ -32,21 +37,32 @@ def formatear_moneda(valor):
     except (ValueError, TypeError):
         return str(valor)
 
-def cargar_base_de_datos_unificada():
-    """Carga y unifica automáticamente todos los archivos Excel en la carpeta data/"""
-    archivos = glob.glob("data/*.xlsx")
+def cargar_base_de_datos_historica():
+    """Escanea recursivamente la carpeta data/ y extrae metadatos de Fracción, Año y Trimestre"""
+    archivos = glob.glob("data/**/*.xlsx", recursive=True)
     dfs = []
+    
     for archivo in archivos:
+        # Extraer metadatos de la ruta (ej: data/frac_7/2026/trimestre_1.xlsx)
+        partes = archivo.replace("\\", "/").split("/")
+        fraccion = partes[1].upper() if len(partes) > 1 else "FRACCION_GENERAL"
+        anio = partes[2] if len(partes) > 2 else "S_ANIO"
+        trimestre = partes[3].replace(".xlsx", "").upper() if len(partes) > 3 else "S_TRIMESTRE"
+        
         try:
             df = pd.read_excel(archivo, sheet_name='Reporte de Formatos')
-            dfs.append(df)
         except Exception:
             try:
                 df = pd.read_excel(archivo, sheet_name=0)
-                dfs.append(df)
             except Exception:
-                pass
-    
+                continue
+        
+        # Inyectar metadatos históricos al DataFrame
+        df['META_FRACCION'] = fraccion
+        df['META_ANIO'] = anio
+        df['META_TRIMESTRE'] = trimestre
+        dfs.append(df)
+        
     if dfs:
         return pd.concat(dfs, ignore_index=True)
     return pd.DataFrame()
@@ -59,42 +75,123 @@ def interfaz_usuario():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>CDHEQROO - Asistente Inteligente de Transparencia</title>
+        <title>CDHEQROO - Asistente Histórico de Transparencia</title>
         <style>
             body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
-            .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+            .container { max-width: 950px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
             h1 { color: #003366; font-size: 24px; margin-bottom: 8px; }
-            p.subtitle { color: #666; font-size: 14px; margin-bottom: 25px; border-bottom: 2px solid #e1e8ed; padding-bottom: 15px; }
+            p.subtitle { color: #666; font-size: 14px; margin-bottom: 20px; border-bottom: 2px solid #e1e8ed; padding-bottom: 15px; }
 
-            .chat-container { border: 1px solid #ddd; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; height: 550px; box-shadow: inset 0 2px 5px rgba(0,0,0,0.02); }
+            /* Pestañas de navegación */
+            .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+            .tab-btn { background: #e1e8ed; border: none; padding: 10px 20px; font-size: 15px; font-weight: bold; color: #444; cursor: pointer; border-radius: 6px; transition: 0.3s; }
+            .tab-btn.active { background-color: #003366; color: white; }
+
+            .tab-content { display: none; }
+            .tab-content.active { display: block; }
+
+            /* Chat IA */
+            .chat-container { border: 1px solid #ddd; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; height: 500px; }
             .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
             .message { max-width: 85%; padding: 14px 18px; border-radius: 10px; font-size: 14px; line-height: 1.5; }
-            .message.bot { background: #e8f4fd; color: #003366; align-self: flex-start; border-left: 4px solid #003366; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
-            .message.user { background: #003366; color: white; align-self: flex-end; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+            .message.bot { background: #e8f4fd; color: #003366; align-self: flex-start; border-left: 4px solid #003366; }
+            .message.user { background: #003366; color: white; align-self: flex-end; }
             .chat-input-box { display: flex; padding: 15px; border-top: 1px solid #ddd; background: white; border-radius: 0 0 8px 8px; gap: 10px; }
+
+            /* Formulario Admin */
+            .admin-form { display: flex; flex-direction: column; gap: 15px; background: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid #ddd; }
+            .form-group { display: flex; flex-direction: column; gap: 5px; }
+            label { font-weight: bold; font-size: 14px; color: #333; }
+            select, input[type="file"] { padding: 10px; border: 2px solid #ddd; border-radius: 6px; font-size: 15px; background: white; outline: none; }
+            select:focus, input[type="file"]:focus { border-color: #003366; }
+            
             input[type="text"] { flex: 1; padding: 12px 16px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; outline: none; transition: 0.3s; }
             input[type="text"]:focus { border-color: #003366; }
             button.action-btn { background-color: #003366; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.3s; }
             button.action-btn:hover { background-color: #002244; }
+            .alert { padding: 12px; border-radius: 6px; margin-top: 10px; font-size: 14px; display: none; }
+            .alert.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+            .alert.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         </style>
     </head>
     <body>
         <div class="container">
             <h1>Comisión de los Derechos Humanos del Estado de Quintana Roo</h1>
-            <p class="subtitle">Asistente Inteligente de Transparencia (Art. 75, Fracción VII y Múltiples Formatos)</p>
+            <p class="subtitle">Repositorio e Histórico Inteligente de Transparencia (Artículo 75)</p>
             
-            <div class="chat-container">
-                <div class="chat-messages" id="chatMessages">
-                    <div class="message bot">¡Hola! Soy tu asistente virtual de transparencia. Pregúntame sobre nombres, puestos, áreas, sueldos máximos/mínimos, rangos o estadísticas (ej. <i>"Erick Armando Poot Alcocer"</i>, <i>"¿Quién gana más?"</i>, <i>"Sueldos entre 20000 y 40000"</i>, <i>"Promedio de sueldos"</i> o <i>"Informática"</i>).</div>
+            <div class="tabs">
+                <button class="tab-btn active" onclick="cambiarTab('chatTab', event)">🤖 Asistente Conversacional</button>
+                <button class="tab-btn" onclick="cambiarTab('adminTab', event)">📁 Carga Histórica (Admin)</button>
+            </div>
+
+            <!-- PESTAÑA 1: CHAT INTELIGENTE -->
+            <div id="chatTab" class="tab-content active">
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message bot">¡Hola! Soy tu asistente histórico de transparencia. Pregúntame sobre cualquier servidor público, sueldos máximos/mínimos, rangos o estadísticas de los trimestres y años cargados (ej. <i>"¿Quién gana más?"</i>, <i>"Sueldos entre 20000 y 40000"</i> o <i>"Erick Armando"</i>).</div>
+                    </div>
+                    <div class="chat-input-box">
+                        <input type="text" id="chatInput" placeholder="Escribe tu consulta aquí...">
+                        <button class="action-btn" onclick="enviarMensajeChat()">Enviar</button>
+                    </div>
                 </div>
-                <div class="chat-input-box">
-                    <input type="text" id="chatInput" placeholder="Escribe tu consulta aquí...">
-                    <button class="action-btn" onclick="enviarMensajeChat()">Enviar</button>
+            </div>
+
+            <!-- PESTAÑA 2: PANEL DE CARGA ADMIN -->
+            <div id="adminTab" class="tab-content">
+                <div class="admin-form">
+                    <h3>Subir Nuevo Formato al Histórico</h3>
+                    <p style="font-size:13px; color:#666; margin-top:-10px;">Selecciona la fracción, el año y el trimestre correspondientes para organizar el archivo automáticamente en el repositorio.</p>
+                    
+                    <div class="form-group">
+                        <label for="fraccionSelect">Fracción del Artículo 75:</label>
+                        <select id="fraccionSelect">
+                            <option value="fraccion_vii">Fracción VII - Remuneraciones brutas y netas</option>
+                            <option value="fraccion_viii">Fracción VIII - Gastos de representación y viáticos</option>
+                            <option value="fraccion_xiv">Fracción XIV - Contrataciones de servicios y obras</option>
+                            <option value="fraccion_xxviii">Fracción XXVIII - Informes de resultados de auditorías</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="anioSelect">Año:</label>
+                        <select id="anioSelect">
+                            <option value="2026">2026</option>
+                            <option value="2025">2025</option>
+                            <option value="2024">2024</option>
+                            <option value="2023">2023</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="trimestreSelect">Trimestre:</label>
+                        <select id="trimestreSelect">
+                            <option value="trimestre_1">Trimestre 1 (Enero - Marzo)</option>
+                            <option value="trimestre_2">Trimestre 2 (Abril - Junio)</option>
+                            <option value="trimestre_3">Trimestre 3 (Julio - Septiembre)</option>
+                            <option value="trimestre_4">Trimestre 4 (Octubre - Diciembre)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fileInput">Archivo Excel (.xlsx):</label>
+                        <input type="file" id="fileInput" accept=".xlsx">
+                    </div>
+
+                    <button class="action-btn" onclick="subirArchivoExcel()">Subir y Registrar en el Histórico</button>
+                    <div class="alert" id="adminAlert"></div>
                 </div>
             </div>
         </div>
 
         <script>
+            function cambiarTab(tabId, event) {
+                document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+                document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+                document.getElementById(tabId).classList.add('active');
+                event.currentTarget.classList.add('active');
+            }
+
             async function enviarMensajeChat() {
                 const input = document.getElementById('chatInput');
                 const chatMessages = document.getElementById('chatMessages');
@@ -117,21 +214,21 @@ def interfaz_usuario():
 
                     if (data.estatus === 'Exito') {
                         if (data.tipo_respuesta === 'estadistica') {
-                            botDiv.innerHTML = `📊 <strong>Reporte Estadístico:</strong><br><br>${data.mensaje}`;
+                            botDiv.innerHTML = `📊 <strong>Reporte Estadístico Histórico:</strong><br><br>${data.mensaje}`;
                         } else if (data.total_encontrados > 0) {
-                            let respuestaTexto = `Encontré <strong>${data.total_encontrados}</strong> registro(s):<br><br>`;
+                            let respuestaTexto = `Encontré <strong>${data.total_encontrados}</strong> registro(s) en el histórico:<br><br>`;
                             data.resultados.forEach(item => {
                                 respuestaTexto += `• <strong>${item.servidor_publico || 'VACANTE'}</strong><br>`;
                                 respuestaTexto += `&nbsp;&nbsp;Puesto: ${item.puesto}<br>`;
                                 respuestaTexto += `&nbsp;&nbsp;Área: ${item.area}<br>`;
-                                respuestaTexto += `&nbsp;&nbsp;Sueldo Neto: <strong>$${item.remuneracion_neta_mensual}</strong><br><br>`;
+                                respuestaTexto += `&nbsp;&nbsp;Sueldo Neto: <strong>$${item.remuneracion_neta_mensual}</strong> <span style="font-size:11px; background:#e2e8f0; padding:2px 6px; border-radius:4px;">[${item.fraccion.replace('_',' ').toUpperCase()} - ${item.anio} ${item.trimestre.replace('_',' ')}]</span><br><br>`;
                             });
                             botDiv.innerHTML = respuestaTexto;
                         } else {
-                            botDiv.textContent = `No encontré registros que coincidan con "${text}". Prueba buscando por nombre completo, puesto, área o rangos salariales.`;
+                            botDiv.textContent = `No encontré registros históricos para "${text}". Prueba con otro término o rango salarial.`;
                         }
                     } else {
-                        botDiv.textContent = `Ocurrió un error al procesar tu consulta con el servidor.`;
+                        botDiv.textContent = `Ocurrió un error al procesar tu consulta.`;
                     }
 
                     chatMessages.appendChild(botDiv);
@@ -139,8 +236,50 @@ def interfaz_usuario():
                 } catch (error) {
                     const errDiv = document.createElement('div');
                     errDiv.className = 'message bot';
-                    errDiv.textContent = 'Ocurrió un error de conexión con el servidor.';
+                    errDiv.textContent = 'Error de conexión con el servidor.';
                     chatMessages.appendChild(errDiv);
+                }
+            }
+
+            async function subirArchivoExcel() {
+                const fraccion = document.getElementById('fraccionSelect').value;
+                const anio = document.getElementById('anioSelect').value;
+                const trimestre = document.getElementById('trimestreSelect').value;
+                const fileInput = document.getElementById('fileInput');
+                const alertBox = document.getElementById('adminAlert');
+
+                if (fileInput.files.length === 0) {
+                    alertBox.className = 'alert error';
+                    alertBox.textContent = 'Por favor selecciona un archivo Excel (.xlsx).';
+                    alertBox.style.display = 'block';
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('file', fileInput.files[0]);
+                formData.append('fraccion', fraccion);
+                formData.append('anio', anio);
+                formData.append('trimestre', trimestre);
+
+                alertBox.className = 'alert';
+                alertBox.textContent = 'Subiendo y procesando archivo...';
+                alertBox.style.display = 'block';
+
+                try {
+                    const response = await fetch('/upload', { method: 'POST', body: formData });
+                    const result = await response.json();
+
+                    if (result.estatus === 'Exito') {
+                        alertBox.className = 'alert success';
+                        alertBox.textContent = result.mensaje;
+                        fileInput.value = '';
+                    } else {
+                        alertBox.className = 'alert error';
+                        alertBox.textContent = 'Error: ' + result.detalle;
+                    }
+                } catch (e) {
+                    alertBox.className = 'alert error';
+                    alertBox.textContent = 'Error al comunicarse con el servidor.';
                 }
             }
 
@@ -153,15 +292,36 @@ def interfaz_usuario():
     """
     return HTMLResponse(content=html_content)
 
+@app.post("/upload")
+def subir_archivo(file: UploadFile = File(...), fraccion: str = Form(...), anio: str = Form(...), trimestre: str = Form(...)):
+    """Endpoint para que el área encargada suba formatos organizados por Fracción, Año y Trimestre"""
+    try:
+        # Crear estructura de carpetas: data/fraccion_vii/2026/
+        dir_destino = os.path.join("data", fraccion, anio)
+        os.makedirs(dir_destino, exist_ok=True)
+        
+        # Ruta final del archivo (ej: data/fraccion_vii/2026/trimestre_1.xlsx)
+        ruta_archivo = os.path.join(dir_destino, f"{trimestre}.xlsx")
+        
+        with open(ruta_archivo, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        return {
+            "estatus": "Exito",
+            "mensaje": f"Archivo guardado exitosamente en el histórico: [{fraccion.upper()} | {anio} | {trimestre.upper()}]"
+        }
+    except Exception as e:
+        return {"estatus": "Error", "detalle": str(e)}
+
 @app.get("/buscar")
 def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
     try:
         termino_crudo = q.replace('"', '').replace("'", "").strip()
         termino_norm = normalizar(termino_crudo)
         
-        df = cargar_base_de_datos_unificada()
+        df = cargar_base_de_datos_historica()
         if df.empty:
-            return {"estatus": "Error", "detalle": "No se encontraron archivos de datos en el servidor."}
+            return {"estatus": "Error", "detalle": "No hay archivos cargados en el repositorio histórico."}
         
         # Limpieza y preparación de columnas numéricas
         try:
@@ -174,20 +334,16 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
         except Exception:
             df['sueldo_neto_num'] = 0.0
 
-        # FILTRO DE CALIDAD: Eliminamos filas que sean encabezados o datos basura (donde no haya nombres reales o sueldos válidos)
-        # Identificamos el nombre concatenando celdas de nombres
+        # Filtro de calidad (descartar basura técnica)
         df['nombre_temp'] = df.apply(lambda r: f"{r.get('Unnamed: 8', '')} {r.get('Unnamed: 9', '')} {r.get('Unnamed: 10', '')}".strip(), axis=1)
-        
-        # Descartamos filas donde el nombre contenga puros números, la palabra "ejercicio", "denominación", etc.
-        df = df[df['sueldo_neto_num'] > 1000].copy() # Sueldos reales mínimos en administración pública
-        df = df[~df['nombre_temp'].str.contains(r'^\d+(\s+\d+)*$', na=False)] # Elimina filas con puros números como "132 133 134"
+        df = df[df['sueldo_neto_num'] > 1000].copy()
+        df = df[~df['nombre_temp'].str.contains(r'^\d+(\s+\d+)*$', na=False)]
 
-        # Texto unificado global por fila
         df['texto_completo'] = df.fillna("").astype(str).agg(lambda x: ' '.join(x), axis=1).map(normalizar)
         
         numeros_en_texto = re.findall(r'\d+', termino_crudo.replace(',', ''))
         
-        # 1. Intención Estadística / Promedios / Totales
+        # 1. Intención Estadística Histórica
         if any(p in termino_norm for p in ["promedio", "media", "total", "suma", "cuantos registros", "cuantos empleados"]):
             total_pers = len(df)
             prom_neto = df['sueldo_neto_num'].mean()
@@ -195,10 +351,10 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
             suma_neto = df['sueldo_neto_num'].sum()
             
             mensaje_est = (
-                f"• Total de registros analizados: <strong>{total_pers}</strong><br>"
-                f"• Sueldo Neto Promedio: <strong>${formatear_moneda(prom_neto)}</strong><br>"
-                f"• Sueldo Bruto Promedio: <strong>${formatear_moneda(prom_bruto)}</strong><br>"
-                f"• Suma Total Nómina Neta: <strong>${formatear_moneda(suma_neto)}</strong>"
+                f"• Total de registros históricos analizados: <strong>{total_pers}</strong><br>"
+                f"• Sueldo Neto Promedio Histórico: <strong>${formatear_moneda(prom_neto)}</strong><br>"
+                f"• Sueldo Bruto Promedio Histórico: <strong>${formatear_moneda(prom_bruto)}</strong><br>"
+                f"• Suma Total Nómina Neta Histórica: <strong>${formatear_moneda(suma_neto)}</strong>"
             )
             return {
                 "estatus": "Exito",
@@ -206,7 +362,7 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
                 "mensaje": mensaje_est
             }
 
-        # 2. Detección de rangos numéricos ("entre X y Y")
+        # 2. Rangos numéricos
         elif ("entre" in termino_norm or " a " in termino_norm or " y " in termino_norm) and len(numeros_en_texto) >= 2:
             min_val = float(numeros_en_texto[0])
             max_val = float(numeros_en_texto[1])
@@ -215,15 +371,15 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
                 max_val *= 1000
             resultado_df = df[(df['sueldo_neto_num'] >= min_val) & (df['sueldo_neto_num'] <= max_val)].sort_values(by='sueldo_neto_num', ascending=False).fillna("")
         
-        # 3. Sueldos máximos ("quién gana más")
+        # 3. Sueldos máximos
         elif any(p in termino_norm for p in ["mas", "mayor", "altos", "maximo"]) and any(p in termino_norm for p in ["sueldo", "gana", "salario", "dinero", "paga"]):
             resultado_df = df.sort_values(by='sueldo_neto_num', ascending=False).head(5).fillna("")
         
-        # 4. Sueldos mínimos ("quién gana menos")
+        # 4. Sueldos mínimos
         elif any(p in termino_norm for p in ["menos", "menor", "bajos", "minimo"]) and any(p in termino_norm for p in ["sueldo", "gana", "salario", "dinero", "paga"]):
             resultado_df = df.sort_values(by='sueldo_neto_num', ascending=True).head(5).fillna("")
         
-        # 5. Búsqueda multi-palabra inteligente (Nombres, puestos, áreas)
+        # 5. Búsqueda multi-palabra inteligente en el histórico
         else:
             palabras = termino_norm.split()
             mask = True
@@ -245,7 +401,10 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
                 "puesto": puesto,
                 "servidor_publico": nombre,
                 "remuneracion_bruta_mensual": sueldo_bruto,
-                "remuneracion_neta_mensual": sueldo_neto
+                "remuneracion_neta_mensual": sueldo_neto,
+                "fraccion": str(row.get('META_FRACCION', '')),
+                "anio": str(row.get('META_ANIO', '')),
+                "trimestre": str(row.get('META_TRIMESTRE', ''))
             })
         
         return {
