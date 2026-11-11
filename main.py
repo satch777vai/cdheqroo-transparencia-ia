@@ -124,18 +124,18 @@ def interfaz_usuario():
     """
     return HTMLResponse(content=html_content)
 
-@app.get("/probar-excel")
-def probar_excel():
+@app.get("/areas")
+def listar_areas():
+    """Endpoint de diagnóstico para ver todas las áreas registradas en el Excel"""
     ruta = "data/lgt_65_vii.1-trimestre-1.xlsx"
     try:
-        xls = pd.ExcelFile(ruta)
         df = pd.read_excel(ruta, sheet_name='Reporte de Formatos')
-        return {
-            "estatus": "Exito",
-            "archivo": "lgt_65_vii.1-trimestre-1.xlsx",
-            "hojas_encontradas": xls.sheet_names,
-            "total_filas": len(df)
-        }
+        if 'Unnamed: 7' in df.columns:
+            areas = df['Unnamed: 7'].dropna().unique().tolist()
+            # Filtramos encabezados si los hay
+            areas_limpias = [str(a) for a in areas if "AREA" not in str(a).upper() and len(str(a)) > 3]
+            return {"estatus": "Exito", "total_areas": len(areas_limpias), "areas": areas_limpias}
+        return {"estatus": "Error", "detalle": "Columna de área no encontrada"}
     except Exception as e:
         return {"estatus": "Error", "detalle": str(e)}
 
@@ -162,7 +162,6 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda: no
             puesto = str(row.get('Unnamed: 5', 'N/D'))
             nombre = f"{row.get('Unnamed: 8', '')} {row.get('Unnamed: 9', '')} {row.get('Unnamed: 10', '')}".strip()
             
-            # Aplicamos formato monetario limpio con 2 decimales
             sueldo_bruto = formatear_moneda(row.get('Unnamed: 12', '0'))
             sueldo_neto = formatear_moneda(row.get('Unnamed: 14', '0'))
             
