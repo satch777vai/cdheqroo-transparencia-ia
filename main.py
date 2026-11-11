@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse
 import pandas as pd
 import unicodedata
 
-app = FastAPI(title="CDHEQROO - Portal de Transparencia Remuneraciones")
+app = FastAPI(title="CDHEQROO - Portal de Transparencia Remuneraciones e IA")
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,17 +38,28 @@ def interfaz_usuario():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>CDHEQROO - Consulta de Remuneraciones</title>
+        <title>CDHEQROO - Asistente y Consulta de Remuneraciones</title>
         <style>
             body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
-            .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+            .container { max-width: 950px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
             h1 { color: #003366; font-size: 24px; margin-bottom: 8px; }
-            p.subtitle { color: #666; font-size: 14px; margin-bottom: 25px; }
-            .search-box { display: flex; gap: 10px; margin-bottom: 25px; }
+            p.subtitle { color: #666; font-size: 14px; margin-bottom: 20px; }
+            
+            /* Pestañas de navegación */
+            .tabs { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 2px solid #e1e8ed; padding-bottom: 10px; }
+            .tab-btn { background: none; border: none; padding: 10px 20px; font-size: 16px; font-weight: bold; color: #666; cursor: pointer; border-radius: 6px; transition: 0.3s; }
+            .tab-btn.active { background-color: #003366; color: white; }
+
+            .tab-content { display: none; }
+            .tab-content.active { display: block; }
+
+            /* Estilos del Buscador */
+            .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
             input[type="text"] { flex: 1; padding: 12px 16px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; outline: none; transition: 0.3s; }
             input[type="text"]:focus { border-color: #003366; }
-            button { background-color: #003366; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-            button:hover { background-color: #002244; }
+            button.action-btn { background-color: #003366; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+            button.action-btn:hover { background-color: #002244; }
+
             .summary-badge { background-color: #e8f4fd; border-left: 5px solid #003366; padding: 12px 18px; border-radius: 6px; margin-bottom: 20px; font-size: 15px; color: #003366; font-weight: 600; display: none; }
             .cards-container { display: flex; flex-direction: column; gap: 15px; }
             .card { border: 1px solid #e1e8ed; border-left: 5px solid #003366; padding: 18px; border-radius: 8px; background: #fafafa; }
@@ -57,48 +68,75 @@ def interfaz_usuario():
             .salary-box { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #ddd; display: flex; gap: 20px; }
             .salary-item { font-size: 14px; }
             .salary-item strong { color: #2e7d32; }
-            .status { font-size: 14px; color: #777; margin-bottom: 15px; }
+
+            /* Estilos del Chat IA */
+            .chat-container { border: 1px solid #ddd; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; height: 450px; }
+            .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+            .message { max-width: 80%; padding: 12px 16px; border-radius: 10px; font-size: 14px; line-height: 1.4; }
+            .message.bot { background: #e8f4fd; color: #003366; align-self: flex-start; border-left: 4px solid #003366; }
+            .message.user { background: #003366; color: white; align-self: flex-end; }
+            .chat-input-box { display: flex; padding: 15px; border-top: 1px solid #ddd; background: white; border-radius: 0 0 8px 8px; gap: 10px; }
         </style>
     </head>
     <body>
         <div class="container">
             <h1>Comisión de los Derechos Humanos del Estado de Quintana Roo</h1>
-            <p class="subtitle">Consulta Pública de Remuneraciones (Art. 75, Fracción VII)</p>
+            <p class="subtitle">Portal de Transparencia y Asistente Inteligente (Art. 75, Fracción VII)</p>
             
-            <div class="search-box">
-                <input type="text" id="searchInput" placeholder="Escribe un nombre, área o puesto (ej. Gabriel, Informatica, Director)...">
-                <button onclick="realizarBusqueda()">Buscar</button>
+            <!-- Botones de navegación -->
+            <div class="tabs">
+                <button class="tab-btn active" onclick="cambiarTab('buscador', event)">🔍 Buscador Tradicional</button>
+                <button class="tab-btn" onclick="cambiarTab('chat', event)">🤖 Asistente Conversacional (IA)</button>
             </div>
 
-            <div class="summary-badge" id="summaryBadge"></div>
-            <div class="status" id="statusMessage">Alineado con estándares de transparencia y accesibilidad.</div>
-            <div class="cards-container" id="resultsContainer"></div>
+            <!-- SECCIÓN 1: BUSCADOR -->
+            <div id="buscador" class="tab-content active">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Escribe un nombre, área o puesto (ej. Gabriel, Informatica, Director)...">
+                    <button class="action-btn" onclick="realizarBusqueda()">Buscar</button>
+                </div>
+                <div class="summary-badge" id="summaryBadge"></div>
+                <div class="cards-container" id="resultsContainer"></div>
+            </div>
+
+            <!-- SECCIÓN 2: CHAT INTELIGENTE -->
+            <div id="chat" class="tab-content">
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message bot">¡Hola! Soy tu asistente virtual de transparencia. Pregúntame sobre sueldos, puestos o áreas (ej. <i>"¿Cuánto gana el Director de Informática?"</i> o <i>"Busca a Gabriel"</i>).</div>
+                    </div>
+                    <div class="chat-input-box">
+                        <input type="text" id="chatInput" placeholder="Escribe tu pregunta aquí...">
+                        <button class="action-btn" onclick="enviarMensajeChat()">Enviar</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <script>
+            function cambiarTab(tabName, event) {
+                document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+                document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+                document.getElementById(tabName).classList.add('active');
+                event.currentTarget.classList.add('active');
+            }
+
             async function realizarBusqueda() {
                 const query = document.getElementById('searchInput').value.trim();
                 const container = document.getElementById('resultsContainer');
-                const status = document.getElementById('statusMessage');
                 const summaryBadge = document.getElementById('summaryBadge');
 
-                if (!query) {
-                    status.textContent = 'Por favor ingresa un término de búsqueda.';
-                    summaryBadge.style.display = 'none';
-                    return;
-                }
-
-                status.textContent = 'Buscando registros en la nube...';
+                if (!query) return;
                 summaryBadge.style.display = 'none';
-                container.innerHTML = '';
+                container.innerHTML = '<p style="color:#666;">Buscando registros...</p>';
 
                 try {
                     const response = await fetch(`/buscar?q=${encodeURIComponent(query)}`);
                     const data = await response.json();
 
+                    container.innerHTML = '';
                     if (data.estatus === 'Exito' && data.total_encontrados > 0) {
-                        status.textContent = '';
-                        summaryBadge.textContent = `Resumen de consulta: Se encontraron ${data.total_encontrados} registro(s) para "${data.busqueda}".`;
+                        summaryBadge.textContent = `Resumen: Se encontraron ${data.total_encontrados} registro(s) para "${data.busqueda}".`;
                         summaryBadge.style.display = 'block';
 
                         data.resultados.forEach(item => {
@@ -107,27 +145,70 @@ def interfaz_usuario():
                             card.innerHTML = `
                                 <h3>${item.servidor_publico || 'PUESTO VACANTE / SIN NOMBRE'}</h3>
                                 <p><strong>Puesto:</strong> ${item.puesto}</p>
-                                <p><strong>Área de Adscripción:</strong> ${item.area}</p>
+                                <p><strong>Área:</strong> ${item.area}</p>
                                 <div class="salary-box">
-                                    <div class="salary-item">Sueldo Bruto Mensual: <strong>$${item.remuneracion_bruta_mensual}</strong></div>
-                                    <div class="salary-item">Sueldo Neto Mensual: <strong>$${item.remuneracion_neta_mensual}</strong></div>
+                                    <div class="salary-item">Bruto Mensual: <strong>$${item.remuneracion_bruta_mensual}</strong></div>
+                                    <div class="salary-item">Neto Mensual: <strong>$${item.remuneracion_neta_mensual}</strong></div>
                                 </div>
                             `;
                             container.appendChild(card);
                         });
                     } else {
-                        status.textContent = '';
-                        summaryBadge.textContent = `Resumen de consulta: No se encontraron registros para "${query}".`;
+                        summaryBadge.textContent = `Resumen: No se encontraron registros para "${query}".`;
                         summaryBadge.style.display = 'block';
                     }
                 } catch (error) {
-                    status.textContent = 'Ocurrió un error al consultar el servidor.';
-                    summaryBadge.style.display = 'none';
+                    container.innerHTML = '<p style="color:red;">Error al consultar el servidor.</p>';
+                }
+            }
+
+            async function enviarMensajeChat() {
+                const input = document.getElementById('chatInput');
+                const chatMessages = document.getElementById('chatMessages');
+                const text = input.value.trim();
+                if (!text) return;
+
+                // Agregar mensaje usuario
+                const userDiv = document.createElement('div');
+                userDiv.className = 'message user';
+                userDiv.textContent = text;
+                chatMessages.appendChild(userDiv);
+                input.value = '';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+
+                // Extraer posible palabra clave de la pregunta (o enviar todo)
+                try {
+                    const response = await fetch(`/buscar?q=${encodeURIComponent(text)}`);
+                    const data = await response.json();
+
+                    const botDiv = document.createElement('div');
+                    botDiv.className = 'message bot';
+
+                    if (data.estatus === 'Exito' && data.total_encontrados > 0) {
+                        let respuestaTexto = `Encontré ${data.total_encontrados} registro(s) relacionado(s) con tu consulta:<br><br>`;
+                        data.resultados.forEach(item => {
+                            respuestaTexto += `• <strong>${item.servidor_publico || 'VACANTE'}</strong> (${item.puesto} en ${item.area})<br>  Sueldo Neto: <strong>$${item.remuneracion_neta_mensual}</strong><br><br>`;
+                        });
+                        botDiv.innerHTML = respuestaTexto;
+                    } else {
+                        botDiv.textContent = `No encontré registros exactos en la base de datos de transparencia para "${text}". Prueba buscando por nombre, puesto o área específica.`;
+                    }
+
+                    chatMessages.appendChild(botDiv);
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                } catch (error) {
+                    const errDiv = document.createElement('div');
+                    errDiv.className = 'message bot';
+                    errDiv.textContent = 'Ocurrió un error al procesar tu consulta con la base de datos.';
+                    chatMessages.appendChild(errDiv);
                 }
             }
 
             document.getElementById('searchInput').addEventListener('keypress', function (e) {
                 if (e.key === 'Enter') realizarBusqueda();
+            });
+            document.getElementById('chatInput').addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') enviarMensajeChat();
             });
         </script>
     </body>
@@ -137,7 +218,6 @@ def interfaz_usuario():
 
 @app.get("/areas")
 def listar_areas():
-    """Endpoint de diagnóstico para ver todas las áreas registradas en el Excel"""
     ruta = "data/lgt_65_vii.1-trimestre-1.xlsx"
     try:
         df = pd.read_excel(ruta, sheet_name='Reporte de Formatos')
@@ -157,7 +237,6 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda: no
         termino_busqueda = normalizar(termino_crudo)
         
         df = pd.read_excel(ruta, sheet_name='Reporte de Formatos')
-        
         df_norm = df.fillna("").astype(str).map(normalizar)
         
         mask = False
