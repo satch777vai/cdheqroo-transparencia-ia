@@ -2,6 +2,7 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 import pandas as pd
+import unicodedata
 
 app = FastAPI(title="CDHEQROO - Portal de Transparencia Remuneraciones")
 
@@ -12,6 +13,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def normalizar(texto):
+    """Elimina acentos/tildes y convierte a minúsculas para una búsqueda robusta"""
+    if not isinstance(texto, str):
+        texto = str(texto)
+    nfd = unicodedata.normalize('NFD', texto)
+    sin_tildes = "".join([c for c in nfd if unicodedata.category(c) != 'Mn'])
+    return sin_tildes.lower()
 
 @app.get("/", response_class=HTMLResponse)
 def interfaz_usuario():
@@ -48,7 +57,7 @@ def interfaz_usuario():
             <p class="subtitle">Consulta Pública de Remuneraciones (Art. 75, Fracción VII)</p>
             
             <div class="search-box">
-                <input type="text" id="searchInput" placeholder="Escribe un nombre, área o puesto (ej. Gabriel, Informática, Director)...">
+                <input type="text" id="searchInput" placeholder="Escribe un nombre, área o puesto (ej. Gabriel, Informatica, Director)...">
                 <button onclick="realizarBusqueda()">Buscar</button>
             </div>
 
@@ -126,14 +135,17 @@ def probar_excel():
 def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda: nombre, puesto o area")):
     ruta = "data/lgt_65_vii.1-trimestre-1.xlsx"
     try:
-        termino = q.replace('"', '').replace("'", "").strip()
+        termino_crudo = q.replace('"', '').replace("'", "").strip()
+        termino_busqueda = normalizar(termino_crudo)
         
         df = pd.read_excel(ruta, sheet_name='Reporte de Formatos')
-        df_str = df.fillna("").astype(str)
+        
+        # Creamos una copia auxiliar normalizada de todo el DataFrame para la búsqueda sin importar tildes ni mayúsculas
+        df_norm = df.fillna("").astype(str).applymap(normalizar)
         
         mask = False
-        for col in df_str.columns:
-            mask = mask | df_str[col].str.contains(termino, case=False, na=False)
+        for col in df_norm.columns:
+            mask = mask | df_norm[col].str.contains(termino_busqueda, na=False)
             
         resultado_df = df[mask].fillna("")
         
@@ -155,7 +167,7 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda: no
         
         return {
             "estatus": "Exito",
-            "busqueda": termino,
+            "busqueda": termino_crudo,
             "total_encontrados": len(registros_limpios),
             "resultados": registros_limpios
         }
