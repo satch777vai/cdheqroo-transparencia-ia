@@ -45,7 +45,6 @@ def interfaz_usuario():
             h1 { color: #003366; font-size: 24px; margin-bottom: 8px; }
             p.subtitle { color: #666; font-size: 14px; margin-bottom: 20px; }
             
-            /* Pestañas de navegación */
             .tabs { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 2px solid #e1e8ed; padding-bottom: 10px; }
             .tab-btn { background: none; border: none; padding: 10px 20px; font-size: 16px; font-weight: bold; color: #666; cursor: pointer; border-radius: 6px; transition: 0.3s; }
             .tab-btn.active { background-color: #003366; color: white; }
@@ -53,7 +52,6 @@ def interfaz_usuario():
             .tab-content { display: none; }
             .tab-content.active { display: block; }
 
-            /* Estilos del Buscador */
             .search-box { display: flex; gap: 10px; margin-bottom: 20px; }
             input[type="text"] { flex: 1; padding: 12px 16px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; outline: none; transition: 0.3s; }
             input[type="text"]:focus { border-color: #003366; }
@@ -69,7 +67,6 @@ def interfaz_usuario():
             .salary-item { font-size: 14px; }
             .salary-item strong { color: #2e7d32; }
 
-            /* Estilos del Chat IA */
             .chat-container { border: 1px solid #ddd; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; height: 450px; }
             .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
             .message { max-width: 80%; padding: 12px 16px; border-radius: 10px; font-size: 14px; line-height: 1.4; }
@@ -83,13 +80,11 @@ def interfaz_usuario():
             <h1>Comisión de los Derechos Humanos del Estado de Quintana Roo</h1>
             <p class="subtitle">Portal de Transparencia y Asistente Inteligente (Art. 75, Fracción VII)</p>
             
-            <!-- Botones de navegación -->
             <div class="tabs">
                 <button class="tab-btn active" onclick="cambiarTab('buscador', event)">🔍 Buscador Tradicional</button>
                 <button class="tab-btn" onclick="cambiarTab('chat', event)">🤖 Asistente Conversacional (IA)</button>
             </div>
 
-            <!-- SECCIÓN 1: BUSCADOR -->
             <div id="buscador" class="tab-content active">
                 <div class="search-box">
                     <input type="text" id="searchInput" placeholder="Escribe un nombre, área o puesto (ej. Gabriel, Informatica, Director)...">
@@ -99,11 +94,10 @@ def interfaz_usuario():
                 <div class="cards-container" id="resultsContainer"></div>
             </div>
 
-            <!-- SECCIÓN 2: CHAT INTELIGENTE -->
             <div id="chat" class="tab-content">
                 <div class="chat-container">
                     <div class="chat-messages" id="chatMessages">
-                        <div class="message bot">¡Hola! Soy tu asistente virtual de transparencia. Pregúntame sobre sueldos, puestos o áreas (ej. <i>"¿Cuánto gana el Director de Informática?"</i> o <i>"Busca a Gabriel"</i>).</div>
+                        <div class="message bot">¡Hola! Soy tu asistente virtual de transparencia. Pregúntame sobre sueldos, puestos o áreas (ej. <i>"¿Quién gana más?"</i>, <i>"¿Cuánto gana el Director de Informática?"</i> o <i>"Busca a Gabriel"</i>).</div>
                     </div>
                     <div class="chat-input-box">
                         <input type="text" id="chatInput" placeholder="Escribe tu pregunta aquí...">
@@ -168,7 +162,6 @@ def interfaz_usuario():
                 const text = input.value.trim();
                 if (!text) return;
 
-                // Agregar mensaje usuario
                 const userDiv = document.createElement('div');
                 userDiv.className = 'message user';
                 userDiv.textContent = text;
@@ -176,7 +169,6 @@ def interfaz_usuario():
                 input.value = '';
                 chatMessages.scrollTop = chatMessages.scrollHeight;
 
-                // Extraer posible palabra clave de la pregunta (o enviar todo)
                 try {
                     const response = await fetch(`/buscar?q=${encodeURIComponent(text)}`);
                     const data = await response.json();
@@ -185,13 +177,13 @@ def interfaz_usuario():
                     botDiv.className = 'message bot';
 
                     if (data.estatus === 'Exito' && data.total_encontrados > 0) {
-                        let respuestaTexto = `Encontré ${data.total_encontrados} registro(s) relacionado(s) con tu consulta:<br><br>`;
+                        let respuestaTexto = `Encontré ${data.total_encontrados} registro(s) relacionado(s):<br><br>`;
                         data.resultados.forEach(item => {
-                            respuestaTexto += `• <strong>${item.servidor_publico || 'VACANTE'}</strong> (${item.puesto} en ${item.area})<br>  Sueldo Neto: <strong>$${item.remuneracion_neta_mensual}</strong><br><br>`;
+                            respuestaTexto += `• <strong>${item.servidor_publico || 'VACANTE'}</strong> (${item.puesto} - ${item.area})<br>  Sueldo Neto: <strong>$${item.remuneracion_neta_mensual}</strong><br><br>`;
                         });
                         botDiv.innerHTML = respuestaTexto;
                     } else {
-                        botDiv.textContent = `No encontré registros exactos en la base de datos de transparencia para "${text}". Prueba buscando por nombre, puesto o área específica.`;
+                        botDiv.textContent = `No encontré coincidencias directas para "${text}". Intenta buscar por nombre de funcionario, puesto específico (ej. Director) o área.`;
                     }
 
                     chatMessages.appendChild(botDiv);
@@ -199,7 +191,7 @@ def interfaz_usuario():
                 } catch (error) {
                     const errDiv = document.createElement('div');
                     errDiv.className = 'message bot';
-                    errDiv.textContent = 'Ocurrió un error al procesar tu consulta con la base de datos.';
+                    errDiv.textContent = 'Ocurrió un error al procesar tu consulta.';
                     chatMessages.appendChild(errDiv);
                 }
             }
@@ -230,20 +222,32 @@ def listar_areas():
         return {"estatus": "Error", "detalle": str(e)}
 
 @app.get("/buscar")
-def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda: nombre, puesto o area")):
+def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
     ruta = "data/lgt_65_vii.1-trimestre-1.xlsx"
     try:
         termino_crudo = q.replace('"', '').replace("'", "").strip()
-        termino_busqueda = normalizar(termino_crudo)
+        termino_norm = normalizar(termino_crudo)
         
         df = pd.read_excel(ruta, sheet_name='Reporte de Formatos')
         df_norm = df.fillna("").astype(str).map(normalizar)
         
-        mask = False
-        for col in df_norm.columns:
-            mask = mask | df_norm[col].str.contains(termino_busqueda, na=False)
-            
-        resultado_df = df[mask].fillna("")
+        # Inteligencia conversacional: si preguntan quién gana más o por mayores sueldos
+        palabras_clave_top = ["mas", "mayor", "altos", "sueldo", "gana", "quien"]
+        es_consulta_top = any(p in termino_norm for p in ["mas", "mayor", "altos"]) and any(p in termino_norm for p in ["sueldo", "gana", "salario"])
+        
+        if es_consulta_top:
+            # Ordenamos todo el DataFrame por sueldo bruto de mayor a menor y tomamos los primeros 5
+            try:
+                df['sueldo_num'] = pd.to_numeric(df['Unnamed: 12'], errors='coerce')
+                resultado_df = df.sort_values(by='sueldo_num', ascending=False).head(5).fillna("")
+            except Exception:
+                resultado_df = df.head(5).fillna("")
+        else:
+            # Búsqueda normal por palabras clave
+            mask = False
+            for col in df_norm.columns:
+                mask = mask | df_norm[col].str.contains(termino_norm, na=False)
+            resultado_df = df[mask].fillna("")
         
         registros_limpios = []
         for _, row in resultado_df.iterrows():
