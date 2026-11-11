@@ -174,10 +174,17 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
         except Exception:
             df['sueldo_neto_num'] = 0.0
 
-        # Texto unificado global por fila para búsquedas multi-palabra y de nombres completos
+        # FILTRO DE CALIDAD: Eliminamos filas que sean encabezados o datos basura (donde no haya nombres reales o sueldos válidos)
+        # Identificamos el nombre concatenando celdas de nombres
+        df['nombre_temp'] = df.apply(lambda r: f"{r.get('Unnamed: 8', '')} {r.get('Unnamed: 9', '')} {r.get('Unnamed: 10', '')}".strip(), axis=1)
+        
+        # Descartamos filas donde el nombre contenga puros números, la palabra "ejercicio", "denominación", etc.
+        df = df[df['sueldo_neto_num'] > 1000].copy() # Sueldos reales mínimos en administración pública
+        df = df[~df['nombre_temp'].str.contains(r'^\d+(\s+\d+)*$', na=False)] # Elimina filas con puros números como "132 133 134"
+
+        # Texto unificado global por fila
         df['texto_completo'] = df.fillna("").astype(str).agg(lambda x: ' '.join(x), axis=1).map(normalizar)
         
-        # Extraer números por si la consulta incluye montos
         numeros_en_texto = re.findall(r'\d+', termino_crudo.replace(',', ''))
         
         # 1. Intención Estadística / Promedios / Totales
@@ -214,8 +221,7 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
         
         # 4. Sueldos mínimos ("quién gana menos")
         elif any(p in termino_norm for p in ["menos", "menor", "bajos", "minimo"]) and any(p in termino_norm for p in ["sueldo", "gana", "salario", "dinero", "paga"]):
-            df_filtrado = df[df['sueldo_neto_num'] > 100]
-            resultado_df = df_filtrado.sort_values(by='sueldo_neto_num', ascending=True).head(5).fillna("")
+            resultado_df = df.sort_values(by='sueldo_neto_num', ascending=True).head(5).fillna("")
         
         # 5. Búsqueda multi-palabra inteligente (Nombres, puestos, áreas)
         else:
