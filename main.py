@@ -18,7 +18,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Asegurar que exista la carpeta base de datos
 os.makedirs("data", exist_ok=True)
 
 def normalizar(texto):
@@ -38,12 +37,11 @@ def formatear_moneda(valor):
         return str(valor)
 
 def cargar_base_de_datos_historica():
-    """Escanea recursivamente la carpeta data/ y extrae metadatos de Fracción, Año y Trimestre"""
+    """Escanea recursivamente la carpeta data/ y extrae metadatos de Fracción, Año y Trimestre de forma segura"""
     archivos = glob.glob("data/**/*.xlsx", recursive=True)
     dfs = []
     
     for archivo in archivos:
-        # Extraer metadatos de la ruta (ej: data/frac_7/2026/trimestre_1.xlsx)
         partes = archivo.replace("\\", "/").split("/")
         fraccion = partes[1].upper() if len(partes) > 1 else "FRACCION_GENERAL"
         anio = partes[2] if len(partes) > 2 else "S_ANIO"
@@ -57,7 +55,7 @@ def cargar_base_de_datos_historica():
             except Exception:
                 continue
         
-        # Inyectar metadatos históricos al DataFrame
+        # Inyectar metadatos históricos
         df['META_FRACCION'] = fraccion
         df['META_ANIO'] = anio
         df['META_TRIMESTRE'] = trimestre
@@ -82,7 +80,6 @@ def interfaz_usuario():
             h1 { color: #003366; font-size: 24px; margin-bottom: 8px; }
             p.subtitle { color: #666; font-size: 14px; margin-bottom: 20px; border-bottom: 2px solid #e1e8ed; padding-bottom: 15px; }
 
-            /* Pestañas de navegación */
             .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
             .tab-btn { background: #e1e8ed; border: none; padding: 10px 20px; font-size: 15px; font-weight: bold; color: #444; cursor: pointer; border-radius: 6px; transition: 0.3s; }
             .tab-btn.active { background-color: #003366; color: white; }
@@ -90,7 +87,6 @@ def interfaz_usuario():
             .tab-content { display: none; }
             .tab-content.active { display: block; }
 
-            /* Chat IA */
             .chat-container { border: 1px solid #ddd; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; height: 500px; }
             .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
             .message { max-width: 85%; padding: 14px 18px; border-radius: 10px; font-size: 14px; line-height: 1.5; }
@@ -98,7 +94,6 @@ def interfaz_usuario():
             .message.user { background: #003366; color: white; align-self: flex-end; }
             .chat-input-box { display: flex; padding: 15px; border-top: 1px solid #ddd; background: white; border-radius: 0 0 8px 8px; gap: 10px; }
 
-            /* Formulario Admin */
             .admin-form { display: flex; flex-direction: column; gap: 15px; background: #fafafa; padding: 20px; border-radius: 8px; border: 1px solid #ddd; }
             .form-group { display: flex; flex-direction: column; gap: 5px; }
             label { font-weight: bold; font-size: 14px; color: #333; }
@@ -124,11 +119,10 @@ def interfaz_usuario():
                 <button class="tab-btn" onclick="cambiarTab('adminTab', event)">📁 Carga Histórica (Admin)</button>
             </div>
 
-            <!-- PESTAÑA 1: CHAT INTELIGENTE -->
             <div id="chatTab" class="tab-content active">
                 <div class="chat-container">
                     <div class="chat-messages" id="chatMessages">
-                        <div class="message bot">¡Hola! Soy tu asistente histórico de transparencia. Pregúntame sobre cualquier servidor público, sueldos máximos/mínimos, rangos o estadísticas de los trimestres y años cargados (ej. <i>"¿Quién gana más?"</i>, <i>"Sueldos entre 20000 y 40000"</i> o <i>"Erick Armando"</i>).</div>
+                        <div class="message bot">¡Hola! Soy tu asistente histórico de transparencia. Pregúntame sobre cualquier servidor público, sueldos máximos/mínimos, rangos o estadísticas (ej. <i>"¿Quién gana más?"</i>, <i>"Sueldos entre 20000 y 40000"</i> o <i>"Erick Armando"</i>).</div>
                     </div>
                     <div class="chat-input-box">
                         <input type="text" id="chatInput" placeholder="Escribe tu consulta aquí...">
@@ -137,19 +131,17 @@ def interfaz_usuario():
                 </div>
             </div>
 
-            <!-- PESTAÑA 2: PANEL DE CARGA ADMIN -->
             <div id="adminTab" class="tab-content">
                 <div class="admin-form">
                     <h3>Subir Nuevo Formato al Histórico</h3>
-                    <p style="font-size:13px; color:#666; margin-top:-10px;">Selecciona la fracción, el año y el trimestre correspondientes para organizar el archivo automáticamente en el repositorio.</p>
+                    <p style="font-size:13px; color:#666; margin-top:-10px;">Selecciona la fracción, el año y el trimestre correspondientes.</p>
                     
                     <div class="form-group">
                         <label for="fraccionSelect">Fracción del Artículo 75:</label>
                         <select id="fraccionSelect">
-                            <option value="fraccion_vii">Fracción VII - Remuneraciones brutas y netas</option>
-                            <option value="fraccion_viii">Fracción VIII - Gastos de representación y viáticos</option>
-                            <option value="fraccion_xiv">Fracción XIV - Contrataciones de servicios y obras</option>
-                            <option value="fraccion_xxviii">Fracción XXVIII - Informes de resultados de auditorías</option>
+                            <option value="fraccion_vii">Fracción VII - Remuneraciones</option>
+                            <option value="fraccion_viii">Fracción VIII - Viáticos y Gastos</option>
+                            <option value="fraccion_xiv">Fracción XIV - Contrataciones</option>
                         </select>
                     </div>
 
@@ -159,17 +151,16 @@ def interfaz_usuario():
                             <option value="2026">2026</option>
                             <option value="2025">2025</option>
                             <option value="2024">2024</option>
-                            <option value="2023">2023</option>
                         </select>
                     </div>
 
                     <div class="form-group">
                         <label for="trimestreSelect">Trimestre:</label>
                         <select id="trimestreSelect">
-                            <option value="trimestre_1">Trimestre 1 (Enero - Marzo)</option>
-                            <option value="trimestre_2">Trimestre 2 (Abril - Junio)</option>
-                            <option value="trimestre_3">Trimestre 3 (Julio - Septiembre)</option>
-                            <option value="trimestre_4">Trimestre 4 (Octubre - Diciembre)</option>
+                            <option value="trimestre_1">Trimestre 1</option>
+                            <option value="trimestre_2">Trimestre 2</option>
+                            <option value="trimestre_3">Trimestre 3</option>
+                            <option value="trimestre_4">Trimestre 4</option>
                         </select>
                     </div>
 
@@ -178,7 +169,7 @@ def interfaz_usuario():
                         <input type="file" id="fileInput" accept=".xlsx">
                     </div>
 
-                    <button class="action-btn" onclick="subirArchivoExcel()">Subir y Registrar en el Histórico</button>
+                    <button class="action-btn" onclick="subirArchivoExcel()">Subir y Registrar</button>
                     <div class="alert" id="adminAlert"></div>
                 </div>
             </div>
@@ -216,19 +207,22 @@ def interfaz_usuario():
                         if (data.tipo_respuesta === 'estadistica') {
                             botDiv.innerHTML = `📊 <strong>Reporte Estadístico Histórico:</strong><br><br>${data.mensaje}`;
                         } else if (data.total_encontrados > 0) {
-                            let respuestaTexto = `Encontré <strong>${data.total_encontrados}</strong> registro(s) en el histórico:<br><br>`;
+                            let respuestaTexto = `Encontré <strong>${data.total_encontrados}</strong> registro(s):<br><br>`;
                             data.resultados.forEach(item => {
-                                respuestaTexto += `• <strong>${item.servidor_publico || 'VACANTE'}</strong><br>`;
+                                respuestaTexto += `• <strong>${item.servidor_publico || 'REGISTRO'}</strong><br>`;
                                 respuestaTexto += `&nbsp;&nbsp;Puesto: ${item.puesto}<br>`;
                                 respuestaTexto += `&nbsp;&nbsp;Área: ${item.area}<br>`;
-                                respuestaTexto += `&nbsp;&nbsp;Sueldo Neto: <strong>$${item.remuneracion_neta_mensual}</strong> <span style="font-size:11px; background:#e2e8f0; padding:2px 6px; border-radius:4px;">[${item.fraccion.replace('_',' ').toUpperCase()} - ${item.anio} ${item.trimestre.replace('_',' ')}]</span><br><br>`;
+                                if (item.remuneracion_neta_mensual !== 'N/D') {
+                                    respuestaTexto += `&nbsp;&nbsp;Sueldo Neto: <strong>$${item.remuneracion_neta_mensual}</strong><br>`;
+                                }
+                                respuestaTexto += `&nbsp;&nbsp;<span style="font-size:11px; background:#e2e8f0; padding:2px 6px; border-radius:4px;">[${item.fraccion.replace('_',' ').toUpperCase()} - ${item.anio} ${item.trimestre.replace('_',' ')}]</span><br><br>`;
                             });
                             botDiv.innerHTML = respuestaTexto;
                         } else {
-                            botDiv.textContent = `No encontré registros históricos para "${text}". Prueba con otro término o rango salarial.`;
+                            botDiv.textContent = `No encontré registros para "${text}". Prueba con otro término.`;
                         }
                     } else {
-                        botDiv.textContent = `Ocurrió un error al procesar tu consulta.`;
+                        botDiv.textContent = `Aviso: ${data.detalle || 'Sin resultados'}`;
                     }
 
                     chatMessages.appendChild(botDiv);
@@ -250,7 +244,7 @@ def interfaz_usuario():
 
                 if (fileInput.files.length === 0) {
                     alertBox.className = 'alert error';
-                    alertBox.textContent = 'Por favor selecciona un archivo Excel (.xlsx).';
+                    alertBox.textContent = 'Selecciona un archivo Excel (.xlsx).';
                     alertBox.style.display = 'block';
                     return;
                 }
@@ -262,7 +256,7 @@ def interfaz_usuario():
                 formData.append('trimestre', trimestre);
 
                 alertBox.className = 'alert';
-                alertBox.textContent = 'Subiendo y procesando archivo...';
+                alertBox.textContent = 'Subiendo archivo...';
                 alertBox.style.display = 'block';
 
                 try {
@@ -294,13 +288,9 @@ def interfaz_usuario():
 
 @app.post("/upload")
 def subir_archivo(file: UploadFile = File(...), fraccion: str = Form(...), anio: str = Form(...), trimestre: str = Form(...)):
-    """Endpoint para que el área encargada suba formatos organizados por Fracción, Año y Trimestre"""
     try:
-        # Crear estructura de carpetas: data/fraccion_vii/2026/
         dir_destino = os.path.join("data", fraccion, anio)
         os.makedirs(dir_destino, exist_ok=True)
-        
-        # Ruta final del archivo (ej: data/fraccion_vii/2026/trimestre_1.xlsx)
         ruta_archivo = os.path.join(dir_destino, f"{trimestre}.xlsx")
         
         with open(ruta_archivo, "wb") as buffer:
@@ -308,7 +298,7 @@ def subir_archivo(file: UploadFile = File(...), fraccion: str = Form(...), anio:
             
         return {
             "estatus": "Exito",
-            "mensaje": f"Archivo guardado exitosamente en el histórico: [{fraccion.upper()} | {anio} | {trimestre.upper()}]"
+            "mensaje": f"Guardado en histórico: [{fraccion.upper()} | {anio} | {trimestre.upper()}]"
         }
     except Exception as e:
         return {"estatus": "Error", "detalle": str(e)}
@@ -323,22 +313,23 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
         if df.empty:
             return {"estatus": "Error", "detalle": "No hay archivos cargados en el repositorio histórico."}
         
-        # Limpieza y preparación de columnas numéricas
+        # Extracción segura de columnas numéricas si existen (para Fracción VII u otras)
+        col_bruto = 'Unnamed: 12' if 'Unnamed: 12' in df.columns else df.columns[0]
+        col_neto = 'Unnamed: 14' if 'Unnamed: 14' in df.columns else df.columns[0]
+        col_area = 'Unnamed: 7' if 'Unnamed: 7' in df.columns else df.columns[0]
+        col_puesto = 'Unnamed: 5' if 'Unnamed: 5' in df.columns else df.columns[0]
+
         try:
-            df['sueldo_bruto_num'] = pd.to_numeric(df['Unnamed: 12'], errors='coerce').fillna(0)
+            df['sueldo_bruto_num'] = pd.to_numeric(df[col_bruto], errors='coerce').fillna(0)
         except Exception:
             df['sueldo_bruto_num'] = 0.0
 
         try:
-            df['sueldo_neto_num'] = pd.to_numeric(df['Unnamed: 14'], errors='coerce').fillna(0)
+            df['sueldo_neto_num'] = pd.to_numeric(df[col_neto], errors='coerce').fillna(0)
         except Exception:
             df['sueldo_neto_num'] = 0.0
 
-        # Filtro de calidad (descartar basura técnica)
-        df['nombre_temp'] = df.apply(lambda r: f"{r.get('Unnamed: 8', '')} {r.get('Unnamed: 9', '')} {r.get('Unnamed: 10', '')}".strip(), axis=1)
-        df = df[df['sueldo_neto_num'] > 1000].copy()
-        df = df[~df['nombre_temp'].str.contains(r'^\d+(\s+\d+)*$', na=False)]
-
+        # Crear texto unificado global por fila de forma segura
         df['texto_completo'] = df.fillna("").astype(str).agg(lambda x: ' '.join(x), axis=1).map(normalizar)
         
         numeros_en_texto = re.findall(r'\d+', termino_crudo.replace(',', ''))
@@ -377,7 +368,8 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
         
         # 4. Sueldos mínimos
         elif any(p in termino_norm for p in ["menos", "menor", "bajos", "minimo"]) and any(p in termino_norm for p in ["sueldo", "gana", "salario", "dinero", "paga"]):
-            resultado_df = df.sort_values(by='sueldo_neto_num', ascending=True).head(5).fillna("")
+            df_filtrado = df[df['sueldo_neto_num'] > 1000]
+            resultado_df = df_filtrado.sort_values(by='sueldo_neto_num', ascending=True).head(5).fillna("")
         
         # 5. Búsqueda multi-palabra inteligente en el histórico
         else:
@@ -389,12 +381,19 @@ def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
         
         registros_limpios = []
         for _, row in resultado_df.iterrows():
-            area = str(row.get('Unnamed: 7', 'N/D'))
-            puesto = str(row.get('Unnamed: 5', 'N/D'))
-            nombre = f"{row.get('Unnamed: 8', '')} {row.get('Unnamed: 9', '')} {row.get('Unnamed: 10', '')}".strip()
+            area = str(row.get(col_area, 'N/D'))
+            puesto = str(row.get(col_puesto, 'N/D'))
             
-            sueldo_bruto = formatear_moneda(row.get('Unnamed: 12', '0'))
-            sueldo_neto = formatear_moneda(row.get('Unnamed: 14', '0'))
+            # Nombre seguro combinando celdas si existen
+            n_partes = []
+            for c_idx in [8, 9, 10]:
+                c_name = f'Unnamed: {c_idx}'
+                if c_name in row and str(row[c_name]).strip() != '':
+                    n_partes.append(str(row[c_name]))
+            nombre = " ".join(n_partes).strip() if n_partes else "SERVIDOR PÚBLICo / REGISTRO"
+            
+            sueldo_bruto = formatear_moneda(row.get(col_bruto, '0')) if col_bruto in row else 'N/D'
+            sueldo_neto = formatear_moneda(row.get(col_neto, '0')) if col_neto in row else 'N/D'
             
             registros_limpios.append({
                 "area": area,
