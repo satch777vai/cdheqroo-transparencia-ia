@@ -1,14 +1,12 @@
-from fastapi import FastAPI, Query, UploadFile, File, Form
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 import pandas as pd
 import unicodedata
 import glob
-import os
 import re
-import shutil
 
-app = FastAPI(title="CDHEQROO - Asistente Histórico de Transparencia")
+app = FastAPI(title="CDHEQROO - Asistente Inteligente de Transparencia")
 
 app.add_middleware(
     CORSMiddleware,
@@ -18,279 +16,214 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-os.makedirs("data", exist_ok=True)
-
 def normalizar(texto):
+    """Elimina acentos/tildes y convierte a minúsculas para una búsqueda robusta"""
     if not isinstance(texto, str):
         texto = str(texto)
     nfd = unicodedata.normalize('NFD', texto)
-    return "".join([c for c in nfd if unicodedata.category(c) != 'Mn']).lower()
+    sin_tildes = "".join([c for c in nfd if unicodedata.category(c) != 'Mn'])
+    return sin_tildes.lower()
 
 def formatear_moneda(valor):
+    """Formatea valores numéricos a estilo monetario con comas y 2 decimales"""
     try:
-        return f"{float(valor):,.2f}"
-    except:
+        num = float(valor)
+        return f"{num:,.2f}"
+    except (ValueError, TypeError):
         return str(valor)
 
-def cargar_base_de_datos_historica():
-    archivos = glob.glob("data/**/*.xlsx", recursive=True)
+def cargar_base_de_datos_unificada():
+    """Carga y unifica automáticamente todos los archivos Excel en la carpeta data/"""
+    archivos = glob.glob("data/*.xlsx")
     dfs = []
     for archivo in archivos:
-        partes = archivo.replace("\\", "/").split("/")
-        fraccion = partes[1].upper() if len(partes) > 1 else "FRACCION_VII"
-        anio = partes[2] if len(partes) > 2 else "2026"
-        trimestre = partes[3].replace(".xlsx", "").upper() if len(partes) > 3 else "TRIMESTRE_1"
         try:
-            df = pd.read_excel(archivo, sheet_name=0)
-            df['META_FRACCION'] = fraccion
-            df['META_ANIO'] = anio
-            df['META_TRIMESTRE'] = trimestre
+            # Intenta leer la hoja estándar de formatos
+            df = pd.read_excel(archivo, sheet_name='Reporte de Formatos')
             dfs.append(df)
-        except:
-            pass
+        except Exception:
+            try:
+                # Si tiene otro nombre, lee la primera hoja disponible
+                df = pd.read_excel(archivo, sheet_name=0)
+                dfs.append(df)
+            except Exception:
+                pass
+    
     if dfs:
         return pd.concat(dfs, ignore_index=True)
     return pd.DataFrame()
 
 @app.get("/", response_class=HTMLResponse)
 def interfaz_usuario():
-    return HTMLResponse(content="""
+    html_content = """
     <!DOCTYPE html>
     <html lang="es">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>CDHEQROO - Repositorio Histórico de Transparencia</title>
+        <title>CDHEQROO - Asistente Inteligente de Transparencia</title>
         <style>
-            body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; color: #333; }
-            .container { max-width: 950px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
-            h1 { color: #003366; font-size: 24px; margin-bottom: 5px; }
-            p.subtitle { color: #666; font-size: 14px; margin-bottom: 20px; border-bottom: 2px solid #e1e8ed; padding-bottom: 15px; }
-            
-            .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
-            .tab-btn { background: #e1e8ed; border: none; padding: 10px 20px; font-size: 15px; font-weight: bold; color: #444; cursor: pointer; border-radius: 6px; transition: 0.3s; }
-            .tab-btn.active { background-color: #003366; color: white; }
-            .tab-content { display: none; }
-            .tab-content.active { display: block; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px; color: #333; }
+            .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+            h1 { color: #003366; font-size: 24px; margin-bottom: 8px; }
+            p.subtitle { color: #666; font-size: 14px; margin-bottom: 25px; border-bottom: 2px solid #e1e8ed; padding-bottom: 15px; }
 
-            .chat-container { border: 1px solid #ddd; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; height: 480px; }
-            .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
-            .message { max-width: 85%; padding: 12px 16px; border-radius: 10px; font-size: 14px; line-height: 1.4; }
-            .message.bot { background: #e8f4fd; color: #003366; align-self: flex-start; border-left: 4px solid #003366; }
-            .message.user { background: #003366; color: white; align-self: flex-end; }
+            /* Estilos exclusivos del Chat IA Minimalista y Elegante */
+            .chat-container { border: 1px solid #ddd; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; height: 550px; box-shadow: inset 0 2px 5px rgba(0,0,0,0.02); }
+            .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+            .message { max-width: 85%; padding: 14px 18px; border-radius: 10px; font-size: 14px; line-height: 1.5; }
+            .message.bot { background: #e8f4fd; color: #003366; align-self: flex-start; border-left: 4px solid #003366; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
+            .message.user { background: #003366; color: white; align-self: flex-end; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
             .chat-input-box { display: flex; padding: 15px; border-top: 1px solid #ddd; background: white; border-radius: 0 0 8px 8px; gap: 10px; }
-            
-            .admin-form { display: flex; flex-direction: column; gap: 15px; background: #fafafa; padding: 25px; border-radius: 8px; border: 1px solid #ddd; }
-            .form-group { display: flex; flex-direction: column; gap: 5px; }
-            label { font-weight: bold; font-size: 14px; color: #333; }
-            select, input[type="file"] { padding: 10px; border: 2px solid #ddd; border-radius: 6px; font-size: 15px; background: white; outline: none; }
-            
-            input[type="text"] { flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; outline: none; }
-            button.action-btn { background-color: #003366; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; }
+            input[type="text"] { flex: 1; padding: 12px 16px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; outline: none; transition: 0.3s; }
+            input[type="text"]:focus { border-color: #003366; }
+            button.action-btn { background-color: #003366; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.3s; }
             button.action-btn:hover { background-color: #002244; }
-            .alert { padding: 12px; border-radius: 6px; margin-top: 10px; font-size: 14px; display: none; }
-            .alert.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-            .alert.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
         </style>
     </head>
     <body>
         <div class="container">
             <h1>Comisión de los Derechos Humanos del Estado de Quintana Roo</h1>
-            <p class="subtitle">Repositorio e Histórico Inteligente de Transparencia (Artículo 75)</p>
+            <p class="subtitle">Asistente Inteligente de Transparencia (Art. 75, Fracción VII y Múltiples Formatos)</p>
             
-            <div class="tabs">
-                <button class="tab-btn active" onclick="cambiarTab('chatTab', event)">🤖 Asistente Conversacional</button>
-                <button class="tab-btn" onclick="cambiarTab('adminTab', event)">📁 Carga Histórica (Admin)</button>
-            </div>
-
-            <div id="chatTab" class="tab-content active">
-                <div class="chat-container">
-                    <div class="chat-messages" id="chatMessages">
-                        <div class="message bot">¡Hola! Soy tu asistente de transparencia. Pregúntame sobre sueldos, puestos, áreas o estadísticas (ej. "Erick", "¿Quién gana más?", "Sueldos entre 20000 y 40000").</div>
-                    </div>
-                    <div class="chat-input-box">
-                        <input type="text" id="chatInput" placeholder="Escribe tu consulta aquí...">
-                        <button class="action-btn" onclick="enviar()">Enviar</button>
-                    </div>
+            <div class="chat-container">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message bot">¡Hola! Soy tu asistente virtual de transparencia. Toda la información institucional está cargada y lista. Pregúntame sobre sueldos, rangos, puestos o áreas (ej. <i>"¿Quién gana más?"</i>, <i>"Sueldos entre 20000 y 40000"</i>, <i>"Informática"</i> o <i>"Busca a Gabriel"</i>).</div>
                 </div>
-            </div>
-
-            <div id="adminTab" class="tab-content">
-                <div class="admin-form">
-                    <h3>Subir Nuevo Formato al Histórico</h3>
-                    <p style="font-size:13px; color:#666; margin-top:-5px;">Selecciona la fracción, el año y el trimestre para organizar el archivo en carpetas automáticamente.</p>
-                    
-                    <div class="form-group">
-                        <label>Fracción del Artículo 75:</label>
-                        <select id="fraccionSelect">
-                            <option value="fraccion_vii">Fracción VII - Remuneraciones</option>
-                            <option value="fraccion_viii">Fracción VIII - Viáticos y Gastos</option>
-                            <option value="fraccion_xiv">Fracción XIV - Contrataciones</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Año:</label>
-                        <select id="anioSelect">
-                            <option value="2026">2026</option>
-                            <option value="2025">2025</option>
-                            <option value="2024">2024</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Trimestre:</label>
-                        <select id="trimestreSelect">
-                            <option value="trimestre_1">Trimestre 1 (Ene-Mar)</option>
-                            <option value="trimestre_2">Trimestre 2 (Abr-Jun)</option>
-                            <option value="trimestre_3">Trimestre 3 (Jul-Sep)</option>
-                            <option value="trimestre_4">Trimestre 4 (Oct-Dic)</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Archivo Excel (.xlsx):</label>
-                        <input type="file" id="fileInput" accept=".xlsx">
-                    </div>
-
-                    <button class="action-btn" onclick="subirArchivo()">Subir y Registrar en el Histórico</button>
-                    <div class="alert" id="adminAlert"></div>
+                <div class="chat-input-box">
+                    <input type="text" id="chatInput" placeholder="Escribe tu consulta aquí...">
+                    <button class="action-btn" onclick="enviarMensajeChat()">Enviar</button>
                 </div>
             </div>
         </div>
 
         <script>
-            function cambiarTab(tabId, event) {
-                document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-                document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-                document.getElementById(tabId).classList.add('active');
-                event.currentTarget.classList.add('active');
-            }
-
-            async function enviar() {
+            async function enviarMensajeChat() {
                 const input = document.getElementById('chatInput');
-                const chat = document.getElementById('chatMessages');
+                const chatMessages = document.getElementById('chatMessages');
                 const text = input.value.trim();
                 if (!text) return;
-                
-                chat.innerHTML += `<div class="message user">${text}</div>`;
+
+                const userDiv = document.createElement('div');
+                userDiv.className = 'message user';
+                userDiv.textContent = text;
+                chatMessages.appendChild(userDiv);
                 input.value = '';
-                chat.scrollTop = chat.scrollHeight;
+                chatMessages.scrollTop = chatMessages.scrollHeight;
 
                 try {
-                    const res = await fetch(`/buscar?q=${encodeURIComponent(text)}`);
-                    const data = await res.json();
-                    let html = `<div class="message bot">`;
-                    if (data.estatus === 'Exito' && data.resultados.length > 0) {
-                        html += `Encontré <strong>${data.resultados.length}</strong> registro(s):<br><br>`;
-                        data.resultados.forEach(r => {
-                            html += `• <strong>${r.servidor_publico}</strong><br>Puesto: ${r.puesto}<br>Área: ${r.area}<br>Sueldo Neto: <strong>$${r.sueldo_neto}</strong><br><span style="font-size:11px; background:#e2e8f0; padding:2px 6px; border-radius:4px;">[${r.fraccion.replace('_',' ').toUpperCase()} - ${r.anio} ${r.trimestre.replace('_',' ')}]</span><br><br>`;
+                    const response = await fetch(`/buscar?q=${encodeURIComponent(text)}`);
+                    const data = await response.json();
+
+                    const botDiv = document.createElement('div');
+                    botDiv.className = 'message bot';
+
+                    if (data.estatus === 'Exito' && data.total_encontrados > 0) {
+                        let respuestaTexto = `Encontré <strong>${data.total_encontrados}</strong> registro(s) analizando los formatos disponibles:<br><br>`;
+                        data.resultados.forEach(item => {
+                            respuestaTexto += `• <strong>${item.servidor_publico || 'VACANTE'}</strong><br>`;
+                            respuestaTexto += `&nbsp;&nbsp;Puesto: ${item.puesto}<br>`;
+                            respuestaTexto += `&nbsp;&nbsp;Área: ${item.area}<br>`;
+                            respuestaTexto += `&nbsp;&nbsp;Sueldo Neto: <strong>$${item.remuneracion_neta_mensual}</strong><br><br>`;
                         });
+                        botDiv.innerHTML = respuestaTexto;
                     } else {
-                        html += `No encontré resultados para "${text}".`;
+                        botDiv.textContent = `No encontré registros que coincidan con "${text}". Prueba buscando por nombre, puesto, área o rangos salariales específicos.`;
                     }
-                    html += `</div>`;
-                    chat.innerHTML += html;
-                    chat.scrollTop = chat.scrollHeight;
-                } catch(e) {
-                    chat.innerHTML += `<div class="message bot">Error al consultar el servidor.</div>`;
+
+                    chatMessages.appendChild(botDiv);
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                } catch (error) {
+                    const errDiv = document.createElement('div');
+                    errDiv.className = 'message bot';
+                    errDiv.textContent = 'Ocurrió un error al procesar tu consulta con el servidor.';
+                    chatMessages.appendChild(errDiv);
                 }
             }
 
-            async function subirArchivo() {
-                const fraccion = document.getElementById('fraccionSelect').value;
-                const anio = document.getElementById('anioSelect').value;
-                const trimestre = document.getElementById('trimestreSelect').value;
-                const fileInput = document.getElementById('fileInput');
-                const alertBox = document.getElementById('adminAlert');
-
-                if (fileInput.files.length === 0) {
-                    alertBox.className = 'alert error';
-                    alertBox.textContent = 'Selecciona un archivo Excel (.xlsx).';
-                    alertBox.style.display = 'block';
-                    return;
-                }
-
-                const formData = new FormData();
-                formData.append('file', fileInput.files[0]);
-                formData.append('fraccion', fraccion);
-                formData.append('anio', anio);
-                formData.append('trimestre', trimestre);
-
-                alertBox.className = 'alert';
-                alertBox.textContent = 'Subiendo archivo...';
-                alertBox.style.display = 'block';
-
-                try {
-                    const res = await fetch('/upload', { method: 'POST', body: formData });
-                    const result = await res.json();
-                    if (result.estatus === 'Exito') {
-                        alertBox.className = 'alert success';
-                        alertBox.textContent = result.mensaje;
-                        fileInput.value = '';
-                    } else {
-                        alertBox.className = 'alert error';
-                        alertBox.textContent = 'Error: ' + result.detalle;
-                    }
-                } catch(e) {
-                    alertBox.className = 'alert error';
-                    alertBox.textContent = 'Error al comunicarse con el servidor.';
-                }
-            }
-
-            document.getElementById('chatInput').addEventListener('keypress', e => { if(e.key === 'Enter') enviar(); });
+            document.getElementById('chatInput').addEventListener('keypress', function (e) {
+                if (e.key === 'Enter') enviarMensajeChat();
+            });
         </script>
     </body>
     </html>
-    """)
-
-@app.post("/upload")
-def subir(file: UploadFile = File(...), fraccion: str = Form(...), anio: str = Form(...), trimestre: str = Form(...)):
-    try:
-        dir_destino = os.path.join("data", fraccion, anio)
-        os.makedirs(dir_destino, exist_ok=True)
-        ruta = os.path.join(dir_destino, f"{trimestre}.xlsx")
-        with open(ruta, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        return {"estatus": "Exito", "mensaje": f"Guardado correctamente en histórico: [{fraccion.upper()} | {anio} | {trimestre.upper()}]"}
-    except Exception as e:
-        return {"estatus": "Error", "detalle": str(e)}
+    """
+    return HTMLResponse(content=html_content)
 
 @app.get("/buscar")
-def buscar(q: str = Query(...)):
+def buscar_remuneracion(q: str = Query(..., description="Termino de busqueda")):
     try:
-        df = cargar_base_de_datos_historica()
+        termino_crudo = q.replace('"', '').replace("'", "").strip()
+        termino_norm = normalizar(termino_crudo)
+        
+        # Cargamos y unificamos automáticamente todos los Excel de la carpeta data/
+        df = cargar_base_de_datos_unificada()
         if df.empty:
-            return {"estatus": "Error", "resultados": []}
+            return {"estatus": "Error", "detalle": "No se encontraron archivos de datos en el servidor."}
         
-        texto_global = df.fillna("").astype(str).agg(lambda x: ' '.join(x), axis=1).map(normalizar)
-        termino = normalizar(q)
-        
-        if "mas" in termino or "mayor" in termino:
-            cols_num = [c for c in df.columns if pd.to_numeric(df[c], errors='coerce').notnull().sum() > 5]
-            if cols_num:
-                df['val_num'] = pd.to_numeric(df[cols_num[-1]], errors='coerce').fillna(0)
-                df = df.sort_values(by='val_num', ascending=False)
-        else:
-            palabras = termino.split()
-            mask = True
-            for p in palabras:
-                mask = mask & texto_global.str.contains(p, na=False)
-            df = df[mask]
+        # Limpieza y preparación de columnas numéricas
+        try:
+            df['sueldo_bruto_num'] = pd.to_numeric(df['Unnamed: 12'], errors='coerce').fillna(0)
+        except Exception:
+            df['sueldo_bruto_num'] = 0.0
 
-        resultados = []
-        for _, row in df.head(5).iterrows():
-            row_str = [str(val) for val in row.values]
-            resultados.append({
-                "servidor_publico": row_str[8] if len(row_str) > 8 else "SERVIDOR PÚBLICO",
-                "puesto": row_str[5] if len(row_str) > 5 else "N/D",
-                "area": row_str[7] if len(row_str) > 7 else "N/D",
-                "sueldo_neto": formatear_moneda(row_str[14]) if len(row_str) > 14 else "0.00",
-                "fraccion": str(row.get('META_FRACCION', '')),
-                "anio": str(row.get('META_ANIO', '')),
-                "trimestre": str(row.get('META_TRIMESTRE', ''))
-            })
+        try:
+            df['sueldo_neto_num'] = pd.to_numeric(df['Unnamed: 14'], errors='coerce').fillna(0)
+        except Exception:
+            df['sueldo_neto_num'] = 0.0
+
+        df_norm = df.fillna("").astype(str).map(normalizar)
+        
+        # 1. Detección de rangos numéricos
+        numeros_en_texto = re.findall(r'\d+', termino_crudo.replace(',', ''))
+        es_rango = ("entre" in termino_norm or " a " in termino_norm or " y " in termino_norm) and len(numeros_en_texto) >= 2
+        
+        if es_rango:
+            min_val = float(numeros_en_texto[0])
+            max_val = float(numeros_en_texto[1])
+            if min_val < 1000 and max_val < 1000:
+                min_val *= 1000
+                max_val *= 1000
+            resultado_df = df[(df['sueldo_neto_num'] >= min_val) & (df['sueldo_neto_num'] <= max_val)].sort_values(by='sueldo_neto_num', ascending=False).fillna("")
+        
+        # 2. Detección de sueldos máximos ("quién gana más")
+        elif any(p in termino_norm for p in ["mas", "mayor", "altos", "maximo"]) and any(p in termino_norm for p in ["sueldo", "gana", "salario", "dinero", "paga"]):
+            resultado_df = df.sort_values(by='sueldo_neto_num', ascending=False).head(5).fillna("")
+        
+        # 3. Detección de sueldos mínimos ("quién gana menos")
+        elif any(p in termino_norm for p in ["menos", "menor", "bajos", "minimo"]) and any(p in termino_norm for p in ["sueldo", "gana", "salario", "dinero", "paga"]):
+            df_filtrado = df[df['sueldo_neto_num'] > 100]
+            resultado_df = df_filtrado.sort_values(by='sueldo_neto_num', ascending=True).head(5).fillna("")
+        
+        # 4. Búsqueda general combinada
+        else:
+            mask = False
+            for col in df_norm.columns:
+                mask = mask | df_norm[col].str.contains(termino_norm, na=False)
+            resultado_df = df[mask].fillna("")
+        
+        registros_limpios = []
+        for _, row in resultado_df.iterrows():
+            area = str(row.get('Unnamed: 7', 'N/D'))
+            puesto = str(row.get('Unnamed: 5', 'N/D'))
+            nombre = f"{row.get('Unnamed: 8', '')} {row.get('Unnamed: 9', '')} {row.get('Unnamed: 10', '')}".strip()
             
-        return {"estatus": "Exito", "resultados": resultados}
+            sueldo_bruto = formatear_moneda(row.get('Unnamed: 12', '0'))
+            sueldo_neto = formatear_moneda(row.get('Unnamed: 14', '0'))
+            
+            registros_limpios.append({
+                "area": area,
+                "puesto": puesto,
+                "servidor_publico": nombre,
+                "remuneracion_bruta_mensual": sueldo_bruto,
+                "remuneracion_neta_mensual": sueldo_neto
+            })
+        
+        return {
+            "estatus": "Exito",
+            "busqueda": termino_crudo,
+            "total_encontrados": len(registros_limpios),
+            "resultados": registros_limpios
+        }
     except Exception as e:
         return {"estatus": "Error", "detalle": str(e)}
